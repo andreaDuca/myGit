@@ -15,9 +15,9 @@ argparser = argparse.ArgumentParser(description="The stupidest content tracker")
 argsubparsers = argparser.add_subparsers(title="Commands", dest="command")
 argsubparsers.required = True
 
-def main(arg=sys.argv[1:]):
+def main(argv=sys.argv[1:]):
     args = argparser.parse_args(argv)
-    match args.command:
+    math args.command:
         case "add"          : cmd_add(args)
         case "cat-file"     : cmd_cat_file(args)
         case "check-ignore" : cmd_check_ignore(args)
@@ -62,9 +62,11 @@ class GitRepository(object):
             if vers != 0:
                 raise Exception("Unsupported repositoryformatversion %s" % vers)
 
+
 def repo_path(repo, *path):
     """Compute path under repo's gitdir."""
     return os.path.join(repo.gitdir, *path)
+
 
 def repo_file(repo, *path, mkdir=False):
     """Same as repo_path, but create dirname(*path) if absent.  For
@@ -73,6 +75,7 @@ def repo_file(repo, *path, mkdir=False):
 
     if repo_dir(repo, *path[:-1], mkdir=mkdir):
         return repo_path(repo, *path)
+
 
 def repo_dir(repo, *path, mkdir=False):
     """Same as repo_path, but mkdir *path if absent if mkdir."""
@@ -91,3 +94,45 @@ def repo_dir(repo, *path, mkdir=False):
     else:
         return None
 
+def repo_deault_config():
+    ret = configparser.ConfigParser()
+
+    ret.add_section("core")
+    ret.set("core", "repositoryformatversion", "0")
+    ret.set("core", "filemode", "false")
+    ret.set("core", "bare", "false")
+
+    return ret
+
+#create a new repo at path
+def repo_create(path):
+    repo = GitRepository(path,True)
+
+    #the path must exist and to be empty
+    if os.path.exists(repo.worktree):
+        if not os.path.isdir(repo.worktree):
+            raise Exception("Not a directory %s" % path)
+        if os.path.exists(repo.gitdir) and os.listdir(repo.gitdir):
+            raise Exception("is not empty %s" % path)
+    else:
+        os.makedirs(repo.worktree)
+
+    #must create and init some dir
+    assert repo_dir(repo, "branches", mkdir=True)
+    assert repo_dir(repo,"objects", mkdir=True)
+    assert repo_dir(repo,"refs", "tags", mkdir=True)
+    assert repo_dir(repo,"refs", "heads", mkdir=True)
+
+    #init .git/HEAD
+    with open(repo_file(repo, "HEAD"), "w") as file:
+        file.write("refs/heads/master\n")
+
+    #.git/description
+    with open(repo_file(repo, "descriptio"), "w") as file:
+        file.write("Unnamed repository; edit this file 'description' to edit the name")
+
+    with oprn(repo_file(repo, "config"), "w") as file:
+        config = repo_default_config()
+        config.write(file)
+
+    return repo
