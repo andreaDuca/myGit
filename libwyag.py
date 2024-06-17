@@ -17,7 +17,7 @@ argsubparsers.required = True
 
 def main(argv=sys.argv[1:]):
     args = argparser.parse_args(argv)
-    math args.command:
+    match args.command:
         case "add"          : cmd_add(args)
         case "cat-file"     : cmd_cat_file(args)
         case "check-ignore" : cmd_check_ignore(args)
@@ -94,7 +94,7 @@ def repo_dir(repo, *path, mkdir=False):
     else:
         return None
 
-def repo_deault_config():
+def repo_default_config():
     ret = configparser.ConfigParser()
 
     ret.add_section("core")
@@ -108,7 +108,7 @@ def repo_deault_config():
 def repo_create(path):
     repo = GitRepository(path,True)
 
-    #the path must exist and to be empty
+    # the path must exist and to be empty
     if os.path.exists(repo.worktree):
         if not os.path.isdir(repo.worktree):
             raise Exception("Not a directory %s" % path)
@@ -117,7 +117,7 @@ def repo_create(path):
     else:
         os.makedirs(repo.worktree)
 
-    #must create and init some dir
+    # must create and init some dir
     assert repo_dir(repo, "branches", mkdir=True)
     assert repo_dir(repo,"objects", mkdir=True)
     assert repo_dir(repo,"refs", "tags", mkdir=True)
@@ -131,8 +131,26 @@ def repo_create(path):
     with open(repo_file(repo, "descriptio"), "w") as file:
         file.write("Unnamed repository; edit this file 'description' to edit the name")
 
-    with oprn(repo_file(repo, "config"), "w") as file:
+    with open(repo_file(repo, "config"), "w") as file:
         config = repo_default_config()
         config.write(file)
 
     return repo
+
+def repo_find(path = ".", required = True):
+    path = os.path.relpath(path)
+
+    # if this is a directory with .git file, then it's the repository
+    if os.path.isdir(path +  ".git"):
+        return GitRepository(path)
+
+    # back to /
+    parent = os.path.realpath(os.path.join(path, ".."))
+    # if not found
+    if parent == path:
+        if required:
+            raise Exception("No git directory")
+        else:
+            return None
+
+    return repo_find(parent, required)
