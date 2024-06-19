@@ -13,9 +13,10 @@ import zlib
 
 argparser = argparse.ArgumentParser(description="The stupidest content tracker")
 argsubparsers = argparser.add_subparsers(title="Commands", dest="command")
+#  required to write the command name
 argsubparsers.required = True
 
-#  another subparser for init command args
+#  an subparser for init command args
 argsp = argsubparsers.add_parser("init", help = "Inizialize a new empty myGit repository.")
 argsp.add_argument("path", metavar = "directory", nargs = "?", default = ".", help = "where to create the repository.")
 
@@ -65,6 +66,92 @@ class GitRepository(object):
             vers = int(self.conf.get("core", "repositoryformatversion"))
             if vers != 0:
                 raise Exception("Unsupported repositoryformatversion %s" % vers)
+
+class GitObject (object):
+
+    def __init__(self, data=None):
+        if data != None:
+            self.deserialize(data)
+        else:
+            self.init()
+
+    def serialize(self, repo):
+        """This function MUST be implemented by subclasses.
+
+It must read the object's contents from self.data, a byte string, and do
+whatever it takes to convert it into a meaningful representation.  What exactly that means depend on each subclass."""
+        raise Exception("Unimplemented!")
+
+    def deserialize(self, data):
+        raise Exception("Unimplemented!")
+
+    def init(self):
+        pass
+
+
+def object_read(repo, sha):
+    """Read object sha from Git repository repo.  Return a
+    GitObject whose exact type depends on the object."""
+
+    path = repo_file(repo, "objects", sha[0:2], sha[2:])
+
+    if not os.path.isfile(path):
+        return None
+
+    # open and read binary
+    with open (path, "rb") as f:
+        raw = zlib.decompress(f.read())
+
+        # Read object type (es. commit), from 0 to index of first withe space
+        spaceIndex = raw.find(b' ')
+        bType = raw[0:spaceIndex]
+
+        # Read and validate object size, from withe space to null
+        nullIndex = raw.find(b'\x00', spaceIndex)
+        size = int(raw[spaceIndex:nullIndex].decode("ascii"))
+        if size != len(raw)-nullIndex-1:
+            raise Exception("Malformed object {0}: bad length".format(sha))
+
+        # Pick constructor
+        match bType:
+            case b'commit' : type=GitCommit
+            case b'tree'   : type=GitTree
+            case b'tag'    : type=GitTag
+            case b'blob'   : type=GitBlob
+            case _:
+                raise Exception("Unknown type {0} for object {1}".format(bType.decode("ascii"), sha))
+
+        # Call constructor and return object, without file header
+        return type(raw[nullIndex+1:])
+
+def object_write(obj, repo=None):
+    # Serialize object data
+    data = obj.serialize()
+    # Add header: (binary) type+space+DataSize+null + data
+    result = obj.bType + b' ' + str(len(data)).encode() + b'\x00' + data
+    # Compute hash
+    sha = hashlib.sha1(result).hexdigest()
+
+    if repo:
+        # Compute path
+        path=repo_file(repo, "objects", sha[0:2], sha[2:], mkdir=True)
+
+        if not os.path.exists(path):
+            with open(path, 'wb') as f:
+                # Compress and write
+                f.write(zlib.compress(result))
+    return sha
+
+
+
+class GitBlob(GitObject):
+    bType=b'blob'
+
+    def serialize(self):
+        return self.blobdata
+
+    def deserialize(self, data):
+        self.blobdata = data   
 
 
 def repo_path(repo, *path):
